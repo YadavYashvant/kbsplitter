@@ -1,23 +1,31 @@
 #!/usr/bin/env python3
 
 import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, GLib, Gdk
+gi.require_version('Gtk', '4.0')
+gi.require_version('Adw', '1')
+from gi.repository import Gtk, Adw, GLib
 import os
 import glob
 import threading
 import kbsplitter
 import json
 
-class ConfigViewWindow(Gtk.Window):
+class ConfigViewWindow(Adw.Window):
     def __init__(self, config_path):
         super().__init__(title=f"Configuration - {os.path.basename(config_path)}")
         self.set_default_size(500, 600)
         
         # Main container
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.set_content(self.main_box)
+
+        # Header bar
+        header = Adw.HeaderBar()
+        self.main_box.append(header)
+        
+        # Scrolled window
         scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.add(scrolled)
+        self.main_box.append(scrolled)
         
         # Create a vertical box for the mappings
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -25,7 +33,7 @@ class ConfigViewWindow(Gtk.Window):
         vbox.set_margin_end(10)
         vbox.set_margin_top(10)
         vbox.set_margin_bottom(10)
-        scrolled.add(vbox)
+        scrolled.set_child(vbox)
         
         # Read and display the config
         with open(config_path, 'r') as f:
@@ -35,103 +43,117 @@ class ConfigViewWindow(Gtk.Window):
                     if '=' in line:
                         xbox_key, keyboard_key = line.split('=')
                         # Create a row for each mapping
-                        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
-                        xbox_label = Gtk.Label(label=xbox_key)
-                        xbox_label.set_size_request(150, -1)
-                        keyboard_label = Gtk.Label(label=keyboard_key)
-                        
-                        hbox.pack_start(xbox_label, False, False, 0)
-                        hbox.pack_start(Gtk.Label(label="→"), False, False, 0)
-                        hbox.pack_start(keyboard_label, False, False, 0)
-                        
-                        vbox.pack_start(hbox, False, False, 0)
-        
-        self.show_all()
+                        row = Adw.ActionRow()
+                        row.set_title(xbox_key)
+                        row.set_subtitle(keyboard_key if keyboard_key else "Not mapped")
+                        vbox.append(row)
 
-class DeviceSelectDialog(Gtk.Dialog):
+class DeviceSelectDialog(Adw.Window):
     def __init__(self, parent):
-        super().__init__(title="Select Keyboard Device", transient_for=parent, flags=0)
+        super().__init__(title="Select Keyboard Device")
+        self.set_transient_for(parent)
+        self.set_modal(True)
         self.set_default_size(400, 300)
         
-        # Add buttons
-        self.add_button(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
-        self.add_button(Gtk.STOCK_OK, Gtk.ResponseType.OK)
+        # Main container
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.set_content(self.main_box)
+
+        # Header bar
+        header = Adw.HeaderBar()
+        self.main_box.append(header)
         
-        # Create list store and view for devices
-        self.store = Gtk.ListStore(str, str)  # device path, device name
-        self.tree = Gtk.TreeView(model=self.store)
+        # Cancel button
+        cancel_button = Gtk.Button(label="Cancel")
+        cancel_button.connect("clicked", lambda x: self.close())
+        header.pack_start(cancel_button)
         
-        renderer = Gtk.CellRendererText()
-        column = Gtk.TreeViewColumn("Available Keyboards", renderer, text=1)
-        self.tree.append_column(column)
+        # Select button
+        select_button = Gtk.Button(label="Select")
+        select_button.add_css_class("suggested-action")
+        select_button.connect("clicked", self.on_select)
+        header.pack_end(select_button)
         
-        # Add to scrolled window
+        # Create list box for devices
+        self.list_box = Gtk.ListBox()
+        self.list_box.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.list_box.add_css_class("boxed-list")
+        
         scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.add(self.tree)
-        
-        # Add to dialog's content area
-        self.get_content_area().add(scrolled)
+        scrolled.set_child(self.list_box)
+        self.main_box.append(scrolled)
         
         # Populate devices
         self.populate_devices()
-        
-        self.show_all()
     
     def populate_devices(self):
-        # Use the existing printKeyboards logic but capture the output
         for f in glob.glob('/dev/input/event*'):
             try:
                 with open(f, 'rb') as fd:
                     dev = kbsplitter.libevdev.Device(fd)
-                    # Check if it's a keyboard using the same logic as in kb2xbox.py
+                    # Check if it's a keyboard
                     passed = True
                     for c in kbsplitter.CHECKS:
                         if not dev.has(c):
                             passed = False
                             break
                     if passed:
-                        self.store.append([f, f"{dev.name} ({f})"])
+                        row = Adw.ActionRow()
+                        row.set_title(dev.name)
+                        row.set_subtitle(f)
+                        self.list_box.append(row)
             except (PermissionError, OSError):
                 continue
     
     def get_selected_device(self):
-        selection = self.tree.get_selection()
-        model, treeiter = selection.get_selected()
-        if treeiter:
-            return model[treeiter][0]
+        row = self.list_box.get_selected_row()
+        if row:
+            return row.get_subtitle()
         return None
 
-class MainWindow(Gtk.Window):
-    def __init__(self):
-        super().__init__(title="Keyboard to Xbox Controller")
-        self.set_border_width(10)
+    def on_select(self, button):
+        if self.get_selected_device():
+            self.response = Gtk.ResponseType.OK
+        self.close()
+
+class MainWindow(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Keyboard to Xbox Controller")
         self.set_default_size(600, 400)
 
-        # Main vertical box
-        self.vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.add(self.vbox)
+        # Main container
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.set_content(self.main_box)
 
+        # Header bar
+        header = Adw.HeaderBar()
+        self.main_box.append(header)
+        
         # Config list
         self.create_config_list()
         
-        # Buttons box
-        self.button_box = Gtk.Box(spacing=6)
-        self.vbox.pack_start(self.button_box, False, True, 0)
+        # Action buttons
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        button_box.set_margin_start(10)
+        button_box.set_margin_end(10)
+        button_box.set_margin_bottom(10)
+        self.main_box.append(button_box)
 
         # Run button
         self.run_button = Gtk.Button(label="Run Controller")
         self.run_button.connect("clicked", self.on_run_clicked)
-        self.button_box.pack_start(self.run_button, True, True, 0)
+        self.run_button.add_css_class("suggested-action")
+        button_box.append(self.run_button)
 
         # View Config button
         self.view_button = Gtk.Button(label="View Configuration")
         self.view_button.connect("clicked", self.on_view_clicked)
-        self.button_box.pack_start(self.view_button, True, True, 0)
+        button_box.append(self.view_button)
 
         # Status label
         self.status_label = Gtk.Label()
-        self.vbox.pack_start(self.status_label, False, True, 0)
+        self.status_label.add_css_class("status")
+        self.main_box.append(self.status_label)
 
         self.controller = None
         self.running = False
@@ -140,7 +162,7 @@ class MainWindow(Gtk.Window):
         # Create scrolled window
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.vbox.pack_start(scrolled, True, True, 0)
+        self.main_box.append(scrolled)
 
         # Create list store
         self.config_store = Gtk.ListStore(str, str)  # filename, full path
@@ -158,7 +180,7 @@ class MainWindow(Gtk.Window):
         column = Gtk.TreeViewColumn("Available Configurations", renderer, text=0)
         self.config_tree.append_column(column)
 
-        scrolled.add(self.config_tree)
+        scrolled.set_child(self.config_tree)
 
     def get_selected_config(self):
         selection = self.config_tree.get_selection()
@@ -244,10 +266,13 @@ class MainWindow(Gtk.Window):
             )
 
 def main():
-    win = MainWindow()
-    win.connect("destroy", Gtk.main_quit)
-    win.show_all()
-    Gtk.main()
+    app = Adw.Application(application_id="org.kbsplitter")
+    app.connect('activate', on_activate)
+    app.run(None)
+
+def on_activate(app):
+    win = MainWindow(app)
+    win.present()
 
 if __name__ == "__main__":
     main() 

@@ -24,6 +24,10 @@ sudo rm -f /etc/udev/rules.d/99-input.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 
+# Remove PolicyKit policy
+echo -e "${YELLOW}Removing PolicyKit policy...${NC}"
+sudo rm -f /usr/share/polkit-1/actions/org.kbsplitter.policy
+
 # Optionally remove dependencies
 read -p "Do you want to remove dependencies? (y/N) " -n 1 -r
 echo

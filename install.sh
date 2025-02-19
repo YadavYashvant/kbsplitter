@@ -25,20 +25,21 @@ if [ -f "/etc/arch-release" ]; then
     
     # Install dependencies
     echo -e "${YELLOW}Installing dependencies...${NC}"
-    yay -S --needed python-libevdev python-gobject gtk3
+    yay -S --needed python-libevdev python-gobject gtk3 libadwaita
 else
     # For other Linux distributions
     echo -e "${YELLOW}Installing dependencies...${NC}"
     if command -v apt &> /dev/null; then
         sudo apt update
-        sudo apt install -y python3-libevdev python3-gi python3-gi-cairo gir1.2-gtk-3.0
+        sudo apt install -y python3-libevdev python3-gi python3-gi-cairo gir1.2-gtk-3.0 libadwaita-1-0 gir1.2-adw-1
     elif command -v dnf &> /dev/null; then
-        sudo dnf install -y python3-libevdev python3-gobject gtk3
+        sudo dnf install -y python3-libevdev python3-gobject gtk3 libadwaita
     else
         echo -e "${RED}Unsupported package manager. Please install the following packages manually:${NC}"
         echo "- python-libevdev"
         echo "- python-gobject"
         echo "- gtk3"
+        echo "- libadwaita"
         exit 1
     fi
 fi
@@ -60,11 +61,32 @@ cat << EOF | sudo tee /usr/share/applications/kbsplitter.desktop
 [Desktop Entry]
 Name=kbsplitter
 Comment=Map keyboard keys to Xbox controller
-Exec=sudo python3 /opt/kbsplitter/kbsplitter_gui.py
+Exec=pkexec python3 /opt/kbsplitter/kbsplitter_gui.py
 Icon=input-gaming
 Terminal=false
 Type=Application
 Categories=Game;Utility;
+EOF
+
+# Create PolicyKit policy
+echo -e "${YELLOW}Creating PolicyKit policy...${NC}"
+cat << EOF | sudo tee /usr/share/polkit-1/actions/org.kbsplitter.policy
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <action id="org.kbsplitter.run">
+    <description>Run kbsplitter</description>
+    <message>Authentication is required to run kbsplitter</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/opt/kbsplitter/kbsplitter_gui.py</annotate>
+  </action>
+</policyconfig>
 EOF
 
 # Make files executable
