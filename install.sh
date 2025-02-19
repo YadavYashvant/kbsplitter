@@ -60,7 +60,7 @@ cat << EOF | sudo tee /usr/share/applications/kbsplitter.desktop
 [Desktop Entry]
 Name=kbsplitter
 Comment=Map keyboard keys to Xbox controller
-Exec=sudo /opt/kbsplitter/kbsplitter_gui.py
+Exec=sudo python3 /opt/kbsplitter/kbsplitter_gui.py
 Icon=input-gaming
 Terminal=false
 Type=Application
