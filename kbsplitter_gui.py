@@ -10,6 +10,18 @@ import kbsplitter
 import json
 import libevdev
 import time
+import logging
+import sys
+
+# Set up logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('/tmp/kbsplitter.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 # Add these constants at the top of the file
 KEYBOARD_CHECKS = [
@@ -296,10 +308,16 @@ class MainWindow(Gtk.Window):
             )
 
 def main():
-    win = MainWindow()
-    win.connect("destroy", Gtk.main_quit)
-    win.show_all()
-    Gtk.main()
+    try:
+        logging.info("Starting kbsplitter GUI application")
+        win = MainWindow()
+        win.connect("destroy", Gtk.main_quit)
+        win.show_all()
+        logging.info("Main window created and shown")
+        Gtk.main()
+    except Exception as e:
+        logging.error(f"Error in main: {str(e)}", exc_info=True)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main() 

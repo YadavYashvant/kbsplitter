@@ -61,7 +61,7 @@ cat << EOF | sudo tee /usr/share/applications/kbsplitter.desktop
 [Desktop Entry]
 Name=kbsplitter
 Comment=Map keyboard keys to Xbox controller
-Exec=pkexec python3 /opt/kbsplitter/kbsplitter_gui.py
+Exec=sh -c "pkexec env DISPLAY=$DISPLAY XAUTHORITY=$XAUTHORITY python3 /opt/kbsplitter/kbsplitter_gui.py 2>&1 | tee -a /tmp/kbsplitter.log"
 Icon=input-gaming
 Terminal=false
 Type=Application
@@ -82,9 +82,10 @@ cat << EOF | sudo tee /usr/share/polkit-1/actions/org.kbsplitter.policy
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>
-      <allow_active>auth_admin</allow_active>
+      <allow_active>yes</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/opt/kbsplitter/kbsplitter_gui.py</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/python3</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
   </action>
 </policyconfig>
 EOF
